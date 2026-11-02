@@ -27,6 +27,10 @@
 - **Caminhos**: todo acesso a arquivo passa por `safe_join`, que rejeita `..`, caminhos absolutos e
   qualquer coisa fora da raiz. A mídia é servida pelo ID do índice, nunca por um caminho vindo do
   cliente.
+- **Gravações do Agent DVR** são só lidas, com `location='agentdvr'` no índice. A retenção e a cota
+  ignoram essa localização, e `.mkv` não é extensão que o MonitorIOS apague. Quando um arquivo some
+  ou envelhece, sai apenas a linha do índice. As credenciais do `objects.json` não são usadas nessa
+  leitura, só o id e o host de cada câmera.
 - **Administração** (`/admin`, `/api/v1/admin/*`, `/docs`) só responde em `127.0.0.1`/`::1`, a menos
   que `admin_remote_access=true`.
 - **CORS** desativado. O painel usa cookie `HttpOnly` e `SameSite=Strict`, mais o cabeçalho

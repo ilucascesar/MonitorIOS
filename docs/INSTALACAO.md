@@ -80,9 +80,22 @@ Execute com `.venv\Scripts\python.exe -m app.cli <comando>`. Com o serviço inst
 
 ## Migração do Agent DVR, sem desligá-lo
 
-O MonitorIOS grava **somente** em `Gravacoes_Cameras\MonitorIOS`. Ele nunca lê, altera ou apaga a
+O MonitorIOS grava **somente** em `Gravacoes_Cameras\MonitorIOS`. Ele nunca altera, move ou apaga a
 pasta `video` nem outras pastas do Agent DVR. A limpeza só apaga arquivos que estejam no índice do
 MonitorIOS **e** dentro da pasta marcada com o arquivo `.monitorios-root`.
+
+**Gravações do Agent DVR no app.** A cada 10 minutos o servidor lê, só para consulta, os `.mkv` da
+pasta `video` e os coloca na linha do tempo da câmera correspondente. A câmera é identificada pelo id
+no nome do arquivo e pelo host no `objects.json`. Assim aparecem também as horas anteriores à
+instalação. Detalhes:
+
+- Na reprodução, o vídeo é convertido sob demanda de MKV para HLS, sem recodificar a imagem. O áudio
+  G.711 do Agent DVR é descartado, porque o iPhone não o reproduz.
+- Onde os dois sistemas gravaram o mesmo horário, vale a gravação do MonitorIOS.
+- Arquivos do Agent DVR não contam na cota do MonitorIOS e nunca são apagados por ele. Arquivos mais
+  antigos que `retention_days` só saem da linha do tempo.
+- A opção `agentdvr_playback` (padrão `true`) liga ou desliga esse recurso. `agentdvr_media_dir`
+  troca a pasta, que por padrão é `video`, ao lado da raiz do MonitorIOS.
 
 1. Instale o MonitorIOS com o Agent DVR ainda ligado. As câmeras aceitam várias conexões RTSP
    simultâneas, e as três funcionaram em paralelo nos testes.
