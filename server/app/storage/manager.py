@@ -48,6 +48,7 @@ class StorageManager:
         self._pending_unlink: set[Path] = set()
         self._last_status = None
         self._wake_uploader = threading.Event()
+        self._reconcile_lock = threading.Lock()
 
     # ------------------------------------------------------------- paths
     @property
@@ -343,8 +344,29 @@ class StorageManager:
         return dropped
 
     # --------------------------------------------------------- reconcile
+    def request_reconcile(self) -> None:
+        """Reconcilia em segundo plano, por exemplo quando câmeras recém-cadastradas já têm vídeos
+        no pendrive (reinstalação ou índice perdido). Ignora o pedido se já houver uma em andamento."""
+        if self._reconcile_lock.locked():
+            return
+
+        def run() -> None:
+            try:
+                if self.state.get("status") != "ok":
+                    self.check_health()
+                if self.state.get("status") == "ok":
+                    self.reconcile_remote()
+            except Exception:
+                log.exception("erro na reconciliação")
+
+        threading.Thread(target=run, name="storage-reconcile", daemon=True).start()
+
     def reconcile_remote(self, limit: int = 5000) -> dict:
         """Indexa vídeos do sistema que existem no SMB mas não no banco, e marca ausentes."""
+        with self._reconcile_lock:
+            return self._reconcile_remote(limit)
+
+    def _reconcile_remote(self, limit: int) -> dict:
         root = self.root
         result = {"added": 0, "missing": 0}
         if not (root / MARKER).exists():
@@ -364,6 +386,9 @@ class StorageManager:
                     rel = p.relative_to(root).as_posix()
                     seen.add(rel)
                     if rel in known or result["added"] >= limit:
+                        continue
+                    # Arquivo recém-enviado: o uploader ainda vai registrá-lo no banco.
+                    if time.time() - file_mtime(p) < 120:
                         continue
                     res = probe_segment(self.cfg.ffprobe, p, self.cfg.settings.hls_part_seconds)
                     if not res.ok:
