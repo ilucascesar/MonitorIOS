@@ -37,6 +37,34 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     throw "Execute este script em um PowerShell aberto como Administrador."
 }
 
+# -------------------------------------------------- Atualização: para o serviço
+# Numa reinstalação, o serviço em execução prende o FFmpeg (gravando) e os pacotes Python do .venv.
+# Ele é parado antes de mexer nos arquivos; se algo falhar no meio, volta a rodar para não deixar
+# as câmeras sem gravar.
+$script:wasRunning = $false
+trap {
+    if ($script:wasRunning) {
+        Write-Warning "Instalação interrompida; reiniciando o serviço anterior."
+        Start-Service $ServiceName -ErrorAction SilentlyContinue
+    }
+    break
+}
+$existing = Get-Service $ServiceName -ErrorAction SilentlyContinue
+if ($existing -and $existing.Status -ne "Stopped") {
+    Step "Parando o serviço $ServiceName para atualizar (a gravação pausa por 1 a 2 minutos)"
+    $script:wasRunning = $true
+    Stop-Service $ServiceName -Force
+    $binDirFull = [IO.Path]::GetFullPath((Join-Path $DataDir "bin"))
+    foreach ($i in 1..15) {
+        $left = Get-Process ffmpeg, ffprobe -ErrorAction SilentlyContinue |
+            Where-Object { $_.Path -and $_.Path.StartsWith($binDirFull, [StringComparison]::OrdinalIgnoreCase) }
+        if (-not $left) { break }
+        # Só processos do MonitorIOS (pasta bin própria); FFmpeg de outros programas não é tocado.
+        if ($i -eq 15) { $left | Stop-Process -Force }
+        Start-Sleep 1
+    }
+}
+
 # ---------------------------------------------------------------- Python
 Step "Verificando Python 3.11+"
 $py = $null
@@ -81,9 +109,15 @@ if (-not $SkipFfmpeg) {
     }
     if ($ff) {
         # Copia para a pasta de dados: o serviço (LocalSystem) não usa o PATH do usuário.
-        Copy-Item $ff (Join-Path $binDir "ffmpeg.exe") -Force
-        Copy-Item (Join-Path (Split-Path $ff) "ffprobe.exe") (Join-Path $binDir "ffprobe.exe") -Force
-        Write-Host "FFmpeg copiado para $binDir"
+        $copied = 0
+        foreach ($exe in "ffmpeg.exe", "ffprobe.exe") {
+            $src = Join-Path (Split-Path $ff) $exe
+            $dst = Join-Path $binDir $exe
+            if ((Test-Path $dst) -and (Get-FileHash $src).Hash -eq (Get-FileHash $dst).Hash) { continue }
+            Copy-Item $src $dst -Force
+            $copied++
+        }
+        Write-Host $(if ($copied) { "FFmpeg copiado para $binDir" } else { "FFmpeg já atualizado em $binDir" })
     } elseif (-not (Test-Path (Join-Path $binDir "ffmpeg.exe"))) {
         throw "FFmpeg é obrigatório. Instale e execute novamente."
     }
@@ -129,6 +163,7 @@ if ($svc) {
     & $VenvPy (Join-Path $ServerDir "service\winservice.py") --startup delayed install
 }
 if ($LASTEXITCODE -ne 0) { throw "Falha ao registrar o serviço" }
+$script:wasRunning = $false  # daqui em diante o serviço é iniciado abaixo (ou fica parado com -NoStart)
 # Reinício automático: 5 s, 15 s e depois a cada 60 s; contador zera após 1 dia.
 sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/15000/restart/60000 | Out-Null
 sc.exe failureflag $ServiceName 1 | Out-Null
