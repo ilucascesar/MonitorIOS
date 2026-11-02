@@ -121,6 +121,15 @@ def test_reconcile_remote_adds_unknown_and_marks_missing(runtime, source_video):
     assert runtime.db.get_segment(sid)["status"] == "missing"
 
 
+def test_panel_reconcile_reports_busy_instead_of_waiting(runtime):
+    setup_root(runtime)
+    with runtime.storage._reconcile_lock:
+        t0 = time.time()
+        res = runtime.storage.reconcile_remote(wait=False)
+        assert res["busy"] is True and time.time() - t0 < 1
+    assert "busy" not in runtime.storage.reconcile_remote(wait=False)
+
+
 def test_new_camera_triggers_reconcile_of_existing_videos(runtime, source_video):
     """Reinstalação: câmeras importadas de novo já têm vídeos no pendrive e devem aparecer na linha do tempo."""
     import shutil
