@@ -1,3 +1,4 @@
+import os
 import time
 
 from app.storage.manager import MARKER
@@ -107,7 +108,10 @@ def test_reconcile_remote_adds_unknown_and_marks_missing(runtime, source_video):
     cam = runtime.db.insert_camera({"name": "Cam", "host": "h", "folder": "Cam"})
     d = runtime.cfg.storage_root / "Cam" / "2026-11-01" / "14"
     d.mkdir(parents=True)
-    shutil.copy(source_video, d / "abc123_20261101-143500.ts")
+    old = d / "abc123_20261101-143500.ts"
+    shutil.copy(source_video, old)
+    os.utime(old, (time.time() - 3600, time.time() - 3600))
+    shutil.copy(source_video, d / "abc123_20261101-143600.ts")  # recém-enviado: fica para o uploader
     sid, p = put(runtime, cam, "Cam", "gone.ts", 5000)
     p.unlink()
     res = runtime.storage.reconcile_remote()
@@ -115,3 +119,23 @@ def test_reconcile_remote_adds_unknown_and_marks_missing(runtime, source_video):
     row = runtime.db.one("SELECT * FROM segments WHERE path LIKE '%abc123%'")
     assert row["status"] == "reconciled" and 19 < row["duration"] < 21
     assert runtime.db.get_segment(sid)["status"] == "missing"
+
+
+def test_new_camera_triggers_reconcile_of_existing_videos(runtime, source_video):
+    """Reinstalação: câmeras importadas de novo já têm vídeos no pendrive e devem aparecer na linha do tempo."""
+    import shutil
+
+    setup_root(runtime)
+    runtime.storage.check_health()
+    d = runtime.cfg.storage_root / "Camera_7" / "2026-11-01" / "21"
+    d.mkdir(parents=True)
+    f = d / "a1b2c3_20261101-210000.ts"
+    shutil.copy(source_video, f)
+    os.utime(f, (time.time() - 3600, time.time() - 3600))
+    runtime.db.insert_camera({"name": "Câmera 7", "host": "h", "folder": "Camera_7", "record_enabled": 0})
+    runtime.apply_camera_changes()
+    deadline = time.time() + 30
+    while time.time() < deadline and not runtime.db.one("SELECT 1 FROM segments WHERE path LIKE '%a1b2c3%'"):
+        time.sleep(0.2)
+    row = runtime.db.one("SELECT * FROM segments WHERE path LIKE '%a1b2c3%'")
+    assert row and row["status"] == "reconciled"
