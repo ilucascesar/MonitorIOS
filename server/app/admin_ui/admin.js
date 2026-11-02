@@ -190,9 +190,23 @@ $("#smbForm").addEventListener("submit", async (e) => {
   $("#storOut").textContent = JSON.stringify(await api("/admin/storage/credentials", { method: "POST", body: { username: f.elements.username.value, password: f.elements.password.value, share: f.elements.share.value, storage_root: f.elements.storage_root.value } }).catch((x) => ({ erro: x.message })), null, 2);
   f.elements.password.value = "";
 });
-$("#smbTest").onclick = async () => { $("#storOut").textContent = JSON.stringify(await api("/admin/storage/test", { method: "POST" }), null, 2); };
-$("#runRetention").onclick = async () => { $("#storOut").textContent = JSON.stringify(await api("/admin/maintenance/retention", { method: "POST" }), null, 2); loadStorage(); };
-$("#runReconcile").onclick = async () => { $("#storOut").textContent = "Reconciliando..."; $("#storOut").textContent = JSON.stringify(await api("/admin/maintenance/reconcile", { method: "POST" }), null, 2); loadStorage(); };
+// Ações de manutenção: mostra o resultado ou o erro (nunca deixa "…" preso na tela).
+async function storageAction(label, path, describe) {
+  const out = $("#storOut");
+  out.textContent = label;
+  try {
+    const r = await api(path, { method: "POST" });
+    out.textContent = describe ? describe(r) : JSON.stringify(r, null, 2);
+  } catch (x) {
+    out.textContent = "Erro: " + x.message + " (recarregue a página e tente de novo)";
+  }
+  loadStorage();
+}
+$("#smbTest").onclick = () => storageAction("Testando...", "/admin/storage/test");
+$("#runRetention").onclick = () => storageAction("Limpando...", "/admin/maintenance/retention");
+$("#runReconcile").onclick = () => storageAction("Reconciliando (pode levar alguns minutos)...", "/admin/maintenance/reconcile", (r) =>
+  r.busy ? "Já há uma reconciliação em andamento. Aguarde 1 a 2 minutos e veja a linha do tempo no app."
+    : `Concluído: ${r.added} vídeo(s) adicionado(s) ao índice, ${r.missing} ausente(s), ${r.buffer || 0} do buffer local.`);
 
 // ----------------------------------------------------------------- usuários
 async function loadUsers() {
