@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Dados locais do servidor (banco, logs, segredos cifrados, buffer, exportações)
+server/.devdata/
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# iOS (o .xcodeproj é gerado pelo XcodeGen)
+ios/*.xcodeproj/
+ios/build/
+ios/Payload/
+*.ipa
+*.xcarchive
+DerivedData/
+xcuserdata/
+
+# Credenciais nunca vão para o repositório
+*.p12
+*.mobileprovision
+*.pem
+*.key
+settings.json
+.env
+
+.DS_Store
+Thumbs.db
