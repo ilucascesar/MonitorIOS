@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from ..security.auth import Principal
@@ -102,6 +102,10 @@ def snapshot(cam_id: int, request: Request):
     media_principal(request, f"cam:{cam_id}")
     runtime = rt(request)
     _cam_or_404(request, cam_id)
+    # Keyframe atual da conexão ao vivo permanente: imagem de agora, sem abrir RTSP nem ler o pendrive.
+    jpeg = runtime.hubs.snapshot(cam_id)
+    if jpeg:
+        return Response(jpeg, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=5"})
     src, key = None, None
     st = runtime.live.streams.get((cam_id, "sub")) or runtime.live.streams.get((cam_id, "main"))
     if st and st.alive():

@@ -15,6 +15,7 @@ _proc.cpu_percent(None)
 def camera_states(runtime: Runtime) -> list[dict]:
     rec = runtime.supervisor.status()
     live = {a["camera_id"] for a in runtime.live.active()}
+    live |= {h["camera_id"] for h in runtime.hubs.active() if h["viewers"]}
     out = []
     for cam in runtime.db.list_cameras():
         r = rec.get(cam["id"])
@@ -76,5 +77,6 @@ def full_status(runtime: Runtime) -> dict:
         "storage": runtime.storage.state,
         "cameras": camera_states(runtime),
         "live": runtime.live.active(),
+        "live_hubs": runtime.hubs.active(),
         "events_version": runtime.events.version,
     }

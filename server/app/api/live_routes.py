@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import time
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
 from ..cameras.urls import build_stream_url
 from ..security.auth import Principal
+from ..streaming.hub import Subscriber
 from ..streaming.live import SAFE_NAME
 from .deps import current_principal, media_principal, playlist_response, rt
 
@@ -48,6 +51,75 @@ def live_info(cam_id: int, request: Request, quality: str = "sub", p: Principal 
         "media_token": mt,
         "expires_at": time.time() + ttl,
     }
+
+
+@router.websocket("/live/{cam_id}/ws")
+async def live_ws(websocket: WebSocket, cam_id: int, quality: str = "main"):
+    """Ao vivo de baixa latência (ver ``streaming.hub``). Autenticação: ``Authorization: Bearer``
+    ou token de mídia ``?mt=`` com escopo da câmera."""
+    runtime = websocket.app.state.rt
+    h = websocket.headers.get("authorization", "")
+    principal = runtime.auth.authenticate(h[7:].strip()) if h.lower().startswith("bearer ") else None
+    mt = websocket.query_params.get("mt", "")
+    if not principal and mt:
+        principal = runtime.auth.verify_media_token(mt, f"cam:{cam_id}")
+    if not principal:
+        await websocket.close(code=4401)
+        return
+    cam = runtime.db.get_camera(cam_id)
+    if not cam:
+        await websocket.close(code=4404)
+        return
+    if not cam["live_enabled"]:
+        await websocket.close(code=4403)
+        return
+    try:
+        hub = await asyncio.to_thread(runtime.hubs.get, cam, quality if quality in ("main", "sub") else "main")
+    except ValueError:
+        await websocket.close(code=4409)
+        return
+    await websocket.accept()
+    sub = Subscriber(asyncio.get_running_loop())
+    q = hub.key[1]
+    await websocket.send_text(json.dumps({
+        "type": "info", "camera_id": cam_id, "quality": q, "state": hub.state,
+        "width": cam["sub_width"] if q == "sub" else cam["width"],
+        "height": cam["sub_height"] if q == "sub" else cam["height"],
+        "fps": cam["fps"], "server_time": time.time(),
+    }))
+    hub.subscribe(sub)
+
+    async def receiver():
+        # O app só manda pings/fechamento; ao desconectar, encerra o envio.
+        try:
+            while True:
+                msg = await websocket.receive()
+                if msg.get("type") == "websocket.disconnect":
+                    break
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        sub.close()
+
+    recv = asyncio.create_task(receiver())
+    try:
+        while True:
+            msg = await sub.next()
+            if msg is None:
+                break
+            if isinstance(msg, str):
+                await websocket.send_text(msg)
+            else:
+                await websocket.send_bytes(msg)
+    except (WebSocketDisconnect, RuntimeError, OSError):
+        pass
+    finally:
+        sub.closed = True
+        hub.unsubscribe(sub)
+        recv.cancel()
+        try:
+            await websocket.close()
+        except RuntimeError:
+            pass
 
 
 @router.get("/live/{cam_id}/{quality}/index.m3u8")
