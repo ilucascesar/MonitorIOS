@@ -20,7 +20,8 @@ final class TimelineMathTests: XCTestCase {
     }
 
     func testTickStepKeepsMinimumSpacing() {
-        for span in [300.0, 1800, 3600, 6 * 3600, 24 * 3600] {
+        let spans: [Double] = [300, 1800, 3600, 6 * 3600, 24 * 3600]
+        for span in spans {
             let step = TimelineMath.tickStep(span: span, width: 390)
             XCTAssertTrue(TimelineMath.tickSteps.contains(step))
             if step != TimelineMath.tickSteps.last! {
