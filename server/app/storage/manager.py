@@ -361,10 +361,15 @@ class StorageManager:
 
         threading.Thread(target=run, name="storage-reconcile", daemon=True).start()
 
-    def reconcile_remote(self, limit: int = 5000) -> dict:
-        """Indexa vídeos do sistema que existem no SMB mas não no banco, e marca ausentes."""
-        with self._reconcile_lock:
+    def reconcile_remote(self, limit: int = 5000, wait: bool = True) -> dict:
+        """Indexa vídeos do sistema que existem no SMB mas não no banco, e marca ausentes.
+        Com ``wait=False`` (painel), responde ``busy`` em vez de esperar outra reconciliação terminar."""
+        if not self._reconcile_lock.acquire(blocking=wait):
+            return {"added": 0, "missing": 0, "busy": True}
+        try:
             return self._reconcile_remote(limit)
+        finally:
+            self._reconcile_lock.release()
 
     def _reconcile_remote(self, limit: int) -> dict:
         root = self.root
