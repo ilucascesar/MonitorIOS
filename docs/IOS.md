@@ -7,10 +7,14 @@ Não há Mac no ambiente de desenvolvimento, então o app é compilado no CI
 
 1. Gera o projeto Xcode a partir de `ios/project.yml` com **XcodeGen**. O `.xcodeproj` não fica no
    repositório.
-2. Roda os testes unitários (`MonitorIOSTests`) num simulador de iPhone.
-3. Compila em Release para `iphoneos` **sem assinatura** e empacota `Payload/MonitorIOS.app` como
+2. Compila em Release para `iphoneos` **sem assinatura** e empacota `Payload/MonitorIOS.app` como
    **`MonitorIOS-unsigned.ipa`**.
-4. Publica o IPA como *artifact* da execução: aba Actions → execução → Artifacts.
+3. Publica o IPA como *artifact* da execução: aba Actions → execução → Artifacts.
+4. Depois, roda os testes unitários (`MonitorIOSTests`) num simulador. Uma falha nos testes não
+   impede o download do IPA.
+
+O repositório é **público** (github.com/ilucascesar/MonitorIOS) para que o macOS do Actions não
+consuma a cota da conta. Ele não contém senhas nem tokens.
 
 Para compilar num Mac: `brew install xcodegen && cd ios && xcodegen && open MonitorIOS.xcodeproj`.
 
