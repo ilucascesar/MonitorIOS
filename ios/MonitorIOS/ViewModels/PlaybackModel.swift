@@ -49,7 +49,8 @@ final class PlaybackModel: ObservableObject {
         self.api = api
         self.day = Calendar.current.startOfDay(for: day)
         self.cursor = Date().timeIntervalSince1970
-        player.automaticallyWaitsToMinimizeStalling = true
+        // Começa a tocar assim que o primeiro trecho chega (o servidor lê do disco local do PC).
+        player.automaticallyWaitsToMinimizeStalling = false
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
