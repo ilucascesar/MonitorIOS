@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS segments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     camera_id INTEGER NOT NULL,
     run_id TEXT NOT NULL DEFAULT '',
-    location TEXT NOT NULL,              -- 'local' (buffer) | 'remote' (SMB)
+    location TEXT NOT NULL,              -- 'local' (buffer) | 'remote' (SMB) | 'agentdvr' (só leitura)
     path TEXT NOT NULL,                  -- relativo à raiz do local
     container TEXT NOT NULL DEFAULT 'ts',
     start_ts REAL NOT NULL,
@@ -234,7 +234,9 @@ class Database:
 
     def latest_segment(self, cam_id: int) -> dict | None:
         return self.one(
-            "SELECT * FROM segments WHERE camera_id=? AND status IN ('ok','partial','reconciled') ORDER BY end_ts DESC LIMIT 1",
+            # Só gravação própria: o Agent DVR gravando não pode mascarar uma falha do MonitorIOS.
+            """SELECT * FROM segments WHERE camera_id=? AND status IN ('ok','partial','reconciled')
+               AND location!='agentdvr' ORDER BY end_ts DESC LIMIT 1""",
             (cam_id,),
         )
 
@@ -269,14 +271,15 @@ class Database:
         if location:
             r = self.one("SELECT COALESCE(SUM(size),0) AS s FROM segments WHERE location=?", (location,))
         else:
-            r = self.one("SELECT COALESCE(SUM(size),0) AS s FROM segments")
+            # Arquivos do Agent DVR não contam na cota do MonitorIOS (e nunca são apagados por ela).
+            r = self.one("SELECT COALESCE(SUM(size),0) AS s FROM segments WHERE location!='agentdvr'")
         return int(r["s"]) if r else 0
 
     def usage_by_camera(self) -> list[dict]:
         return self.query(
             """SELECT camera_id, COUNT(*) AS segments, COALESCE(SUM(size),0) AS bytes,
                       MIN(start_ts) AS oldest, MAX(end_ts) AS newest
-               FROM segments GROUP BY camera_id"""
+               FROM segments WHERE location!='agentdvr' GROUP BY camera_id"""
         )
 
     # --------------------------------------------------------------- events
