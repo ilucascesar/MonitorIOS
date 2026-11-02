@@ -58,9 +58,13 @@ senhas em arquivos do repositório.
 
 ## Uso do app
 
-- **Câmeras**: grade com miniaturas (ou vídeo ao vivo em grade, se ativado), estado online/offline e
-  gravação. Toque numa câmera para abrir **AO VIVO / GRAVAÇÕES**.
-- **Ao vivo**: qualidade alta ou econômica, captura de imagem, tela cheia e horário da imagem.
+- **Câmeras**: grade com o vídeo ao vivo de todas as câmeras (o botão no topo troca para miniaturas),
+  estado online/offline e gravação. Toque numa câmera para abrir **AO VIVO / GRAVAÇÕES**; o botão
+  de relógio no canto de cada câmera abre direto as gravações dela.
+- **Ao vivo**: abre na hora (o servidor fica conectado às câmeras o tempo todo), com decodificação
+  por hardware e atraso mínimo. Pinça ou toque duplo para ampliar, áudio (desligado por padrão),
+  qualidade alta ou econômica, captura de imagem e tela cheia (gire o iPhone). Se a rede cair, a
+  última imagem fica na tela com o aviso "Reconectando…" e o vídeo volta sozinho.
 - **Gravações**: calendário do mês (dias com gravação destacados pela quantidade de horas) e linha do
   tempo de 24 h:
   - arrastar a régua escolhe o horário;

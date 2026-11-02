@@ -2,7 +2,7 @@
 
 ## Testes automáticos
 
-**Servidor** (`server/tests`, `python -m pytest`): 53 testes passando no Windows 11. Também rodam no
+**Servidor** (`server/tests`, `python -m pytest`): 66 testes passando no Windows 11. Também rodam no
 CI (`.github/workflows/server.yml`).
 
 | Área | Cobertura |
@@ -13,9 +13,21 @@ CI (`.github/workflows/server.yml`).
 | Linha do tempo | União de intervalos, lacunas, localização do próximo trecho, dias do mês com fuso |
 | Segurança | Limite de login (429), admin bloqueado para IP remoto, CSRF do cookie, escopo do token de mídia, `Range` 206, **log sem tokens nem senhas**, `safe_join` |
 | Saúde das câmeras | Falha isolada de conexão não gera alarme; 3 falhas seguidas geram um único aviso |
+| Ao vivo (WebSocket) | FFmpeg real: recusa sem autenticação (4401); segundo espectador recebe imagem em menos de 0,5 s; câmera que cai envia `reset` e volta com keyframe; espectador lento descarta até o próximo keyframe |
+| Cópia local | Primeiro pedido copia o segmento e enfileira os seguintes; retenção apaga original e cópia; limite de tamanho tira as mais antigas sem tocar no pendrive; arquivos do Agent DVR copiados sem alterar o original; migração das configurações |
 
 **App iOS** (`ios/MonitorIOSTests`, rodam no CI em simulador): matemática da linha do tempo
-(posição ↔ horário, zoom, lacunas, deslocamento na playlist) e decodificação do JSON real da API.
+(posição ↔ horário, zoom, lacunas, deslocamento na playlist), decodificação do JSON real da API,
+protocolo do ao vivo, parâmetros H.264, áudio µ-law e o relógio de exibição.
+
+## Velocidade medida com as câmeras reais (02/11/2026)
+
+| Etapa | Antes | Agora |
+|---|---|---|
+| Abrir o ao vivo (servidor já conectado) | cerca de 4 s ou mais (HLS) | primeira imagem imediata (GOP guardado) |
+| Abrir o ao vivo (câmera acabou de ligar) | cerca de 4 s ou mais | cerca de 3 s |
+| Captura (`snapshot.jpg`) | cerca de 2–3 s (abria o RTSP) | menos de 0,1 s |
+| Abrir arquivo de gravação no pendrive | 0,1 s a 14 s | lido do disco do PC |
 
 ## Validado com as câmeras reais (servidor de desenvolvimento, 01/11/2026)
 
@@ -23,8 +35,9 @@ CI (`.github/workflows/server.yml`).
 - `record-test` e gravação contínua das **3 câmeras simultaneamente** com o Agent DVR ligado:
   - segmentos de 60 s contíguos, sem lacunas, enviados a `Gravacoes_Cameras\MonitorIOS`;
   - CPU do processo do servidor em cerca de 1,5 %.
-- Ao vivo: imagem principal e secundária em HLS em cerca de 4 s. A captura (snapshot) é a imagem
-  real, e o horário na imagem da câmera bate com o do servidor.
+- Ao vivo: imagem principal e secundária em HLS em cerca de 4 s (substituído pelo WebSocket, ver
+  acima). A captura (snapshot) é a imagem real, e o horário na imagem da câmera bate com o do
+  servidor.
 - Playlist de gravação com horário real (`PROGRAM-DATE-TIME`) e byte ranges; `Range` 206.
 - Endpoints de dias, linha do tempo e localização.
 - Exportação real de 60 s: MP4 de cerca de 4,5 MB baixado com sucesso.

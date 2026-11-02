@@ -24,6 +24,12 @@
   progressivamente e a API responde 429.
 - **Tokens de mídia** (HLS, segmentos, download) são assinados com HMAC, valem por pouco tempo, ficam
   restritos a uma câmera ou exportação e são vinculados à sessão. Encerrar a sessão invalida todos.
+- **Ao vivo por WebSocket** (`/api/v1/live/{id}/ws`): exige o token de sessão no cabeçalho
+  `Authorization` (ou um token de mídia da câmera). Sem autenticação a conexão é fechada com o
+  código 4401, antes de qualquer imagem.
+- **Cópia local das gravações** (`C:\ProgramData\MonitorIOS\mirror`) fica sob a mesma ACL (SYSTEM e
+  Administradores). Das gravações do Agent DVR o servidor só **lê** o original para copiar; a limpeza
+  da cópia local só apaga arquivos dentro dessa pasta.
 - **Caminhos**: todo acesso a arquivo passa por `safe_join`, que rejeita `..`, caminhos absolutos e
   qualquer coisa fora da raiz. A mídia é servida pelo ID do índice, nunca por um caminho vindo do
   cliente.

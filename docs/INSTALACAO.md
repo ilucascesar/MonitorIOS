@@ -76,6 +76,8 @@ Execute com `.venv\Scripts\python.exe -m app.cli <comando>`. Com o serviço inst
 | `record-test --id ID --seconds 150` | Grava uma câmera por N segundos e mostra os segmentos indexados |
 | `reconcile`, `retention` | Reconciliação de arquivos fora do índice e limpeza imediata |
 | `settings --set retention_days=15 max_storage_gb=200` | Altera as configurações |
+| `settings --set local_cache_gb=40` | Tamanho máximo da cópia local das gravações no disco do PC (0 desativa) |
+| `settings --set live_always_on=true` | Mantém cada câmera conectada para o ao vivo abrir na hora (padrão) |
 | `add-user NOME --role viewer`, `passwd NOME` | Usuários |
 
 ## Migração do Agent DVR, sem desligá-lo
