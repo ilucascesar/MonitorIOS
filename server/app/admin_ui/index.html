@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MonitorIOS · Administração</title>
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div id="login" class="login hidden">
+  <form id="loginForm" class="card">
+    <h1>MonitorIOS</h1>
+    <p class="muted">Painel administrativo local</p>
+    <label>Usuário <input name="username" autocomplete="username" required></label>
+    <label>Senha <input name="password" type="password" autocomplete="current-password" required></label>
+    <button type="submit">Entrar</button>
+    <p id="loginError" class="error"></p>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <strong>MonitorIOS</strong>
+    <nav>
+      <a href="#status" class="active">Status</a>
+      <a href="#cameras">Câmeras</a>
+      <a href="#storage">Armazenamento</a>
+      <a href="#users">Usuários</a>
+      <a href="#logs">Logs</a>
+    </nav>
+    <span id="who" class="muted"></span>
+    <button id="logout" class="ghost">Sair</button>
+  </header>
+
+  <main>
+    <section id="sec-status">
+      <div class="grid3">
+        <div class="card"><h3>Servidor</h3><div id="sys"></div></div>
+        <div class="card"><h3>Armazenamento</h3><div id="stor"></div></div>
+        <div class="card"><h3>Ao vivo</h3><div id="live"></div></div>
+      </div>
+      <div class="card"><h3>Câmeras</h3><table id="camStatus"></table></div>
+      <div class="card"><h3>Eventos recentes</h3><table id="events"></table></div>
+    </section>
+
+    <section id="sec-cameras" class="hidden">
+      <div class="toolbar">
+        <button id="newCam">Adicionar câmera</button>
+        <button id="discover" class="ghost">Descobrir ONVIF</button>
+        <button id="importAgent" class="ghost">Importar do Agent DVR</button>
+      </div>
+      <div id="discoverResult"></div>
+      <table id="camTable"></table>
+      <form id="camForm" class="card hidden">
+        <h3 id="camFormTitle">Câmera</h3>
+        <input type="hidden" name="id">
+        <div class="grid2">
+          <label>Nome <input name="name" required maxlength="64"></label>
+          <label>IP / hostname <input name="host" required></label>
+          <label>Porta ONVIF <input name="onvif_port" type="number" value="80"></label>
+          <label>Porta RTSP <input name="rtsp_port" type="number" value="554"></label>
+          <label>Usuário <input name="username" autocomplete="off"></label>
+          <label>Senha <input name="password" type="password" autocomplete="new-password" placeholder="(inalterada)"></label>
+          <label class="span2">URL RTSP principal <input name="main_url" placeholder="rtsp://ip:porta/caminho"></label>
+          <label class="span2">URL RTSP secundária <input name="sub_url" placeholder="opcional"></label>
+          <label>Gravar fluxo
+            <select name="record_stream"><option value="main">Principal</option><option value="sub">Secundário</option></select></label>
+          <label>Áudio
+            <select name="audio_mode"><option value="none">Sem áudio</option><option value="aac">AAC (recodifica áudio)</option><option value="copy">Copiar</option></select></label>
+          <label class="check"><input type="checkbox" name="record_enabled" checked> Gravação habilitada</label>
+          <label class="check"><input type="checkbox" name="live_enabled" checked> Ao vivo habilitado</label>
+        </div>
+        <div class="toolbar">
+          <button type="submit">Salvar</button>
+          <button type="button" id="onvifFill" class="ghost">Buscar perfis via ONVIF</button>
+          <button type="button" id="camCancel" class="ghost">Cancelar</button>
+        </div>
+        <pre id="camFormOut" class="out"></pre>
+      </form>
+      <pre id="camOut" class="out"></pre>
+    </section>
+
+    <section id="sec-storage" class="hidden">
+      <div class="grid2">
+        <form id="smbForm" class="card">
+          <h3>Compartilhamento SMB</h3>
+          <label>Compartilhamento <input name="share"></label>
+          <label>Pasta do sistema <input name="storage_root"></label>
+          <label>Usuário <input name="username" autocomplete="off" required></label>
+          <label>Senha <input name="password" type="password" autocomplete="new-password"></label>
+          <div class="toolbar"><button type="submit">Salvar e testar</button><button type="button" id="smbTest" class="ghost">Testar agora</button></div>
+        </form>
+        <form id="settingsForm" class="card">
+          <h3>Gravação e retenção</h3>
+          <label>Duração do segmento (s) <input name="segment_seconds" type="number" min="10" max="900"></label>
+          <label>Retenção (dias) <input name="retention_days" type="number" min="1"></label>
+          <label>Limite global do sistema (GB) <input name="max_storage_gb" type="number" step="0.5"></label>
+          <label>Espaço livre mínimo no pendrive (GB) <input name="min_free_gb" type="number" step="0.5"></label>
+          <label>Buffer local máximo (GB) <input name="buffer_max_gb" type="number" step="0.5"></label>
+          <label class="check"><input type="checkbox" name="upload_enabled"> Enviar segmentos ao pendrive</label>
+          <div class="toolbar"><button type="submit">Salvar</button>
+            <button type="button" id="runRetention" class="ghost">Executar retenção</button>
+            <button type="button" id="runReconcile" class="ghost">Reconciliar índice</button></div>
+        </form>
+      </div>
+      <div class="card"><h3>Uso por câmera</h3><table id="usage"></table></div>
+      <pre id="storOut" class="out"></pre>
+    </section>
+
+    <section id="sec-users" class="hidden">
+      <div class="card"><table id="userTable"></table></div>
+      <form id="userForm" class="card">
+        <h3>Novo usuário</h3>
+        <div class="grid2">
+          <label>Usuário <input name="username" required></label>
+          <label>Senha (mín. 8) <input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+          <label>Perfil <select name="role"><option value="viewer">Visualizador (app)</option><option value="admin">Administrador</option></select></label>
+        </div>
+        <button type="submit">Criar</button>
+      </form>
+    </section>
+
+    <section id="sec-logs" class="hidden">
+      <div class="toolbar"><button id="reloadLogs" class="ghost">Atualizar</button>
+        <select id="logLevel"><option value="">Todos</option><option>INFO</option><option>WARNING</option><option>ERROR</option></select></div>
+      <pre id="logs" class="logs"></pre>
+    </section>
+  </main>
+</div>
+<script src="admin.js"></script>
+</body>
+</html>
