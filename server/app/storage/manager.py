@@ -28,6 +28,7 @@ from ..recordings.indexer import probe_segment, file_mtime
 from ..security import secrets as vault
 from ..security.paths import safe_join, is_media_file
 from . import smb
+from .agentdvr import LOCATION as AGENTDVR, AgentDvrIndex
 
 log = logging.getLogger("storage")
 
@@ -49,6 +50,7 @@ class StorageManager:
         self._last_status = None
         self._wake_uploader = threading.Event()
         self._reconcile_lock = threading.Lock()
+        self.agentdvr = AgentDvrIndex(cfg, db, events)
 
     # ------------------------------------------------------------- paths
     @property
@@ -56,6 +58,8 @@ class StorageManager:
         return self.cfg.storage_root
 
     def resolve(self, seg: dict) -> Path:
+        if seg["location"] == AGENTDVR:
+            return safe_join(self.cfg.agentdvr_root, seg["path"], foreign=True)
         base = self.cfg.buffer_dir if seg["location"] == "local" else self.root
         return safe_join(base, seg["path"])
 
@@ -70,6 +74,7 @@ class StorageManager:
             (self._health_loop, "storage-health"),
             (self._upload_loop, "storage-upload"),
             (self._maintenance_loop, "storage-maint"),
+            (self._agentdvr_loop, "storage-agentdvr"),
         ):
             t = threading.Thread(target=target, name=name, daemon=True)
             t.start()
@@ -246,7 +251,20 @@ class StorageManager:
                 log.exception("erro na manutenção do armazenamento")
             self._stop.wait(600)
 
+    def _agentdvr_loop(self) -> None:
+        # Arquivos novos do Agent DVR fecham a cada 15 min enquanto os dois sistemas gravam juntos.
+        self._stop.wait(30)
+        while not self._stop.is_set():
+            try:
+                if self.state.get("status") in ("ok", "degraded"):
+                    self.agentdvr.scan()
+            except Exception:
+                log.exception("erro ao indexar gravações do Agent DVR")
+            self._stop.wait(600)
+
     def _delete_segment(self, seg: dict) -> bool:
+        if seg["location"] == AGENTDVR:
+            return False  # arquivo do Agent DVR: o MonitorIOS nunca apaga
         try:
             p = self.resolve(seg)
         except ValueError:
@@ -282,7 +300,7 @@ class StorageManager:
         deleted = {"age": 0, "quota": 0, "free_space": 0}
         cutoff = time.time() - s.retention_days * 86400
         while True:
-            old = self.db.query("SELECT * FROM segments WHERE end_ts < ? AND protected=0 ORDER BY start_ts LIMIT 500", (cutoff,))
+            old = self.db.query("SELECT * FROM segments WHERE end_ts < ? AND protected=0 AND location!='agentdvr' ORDER BY start_ts LIMIT 500", (cutoff,))
             if not old:
                 break
             n = sum(self._delete_segment(seg) for seg in old)
@@ -292,7 +310,7 @@ class StorageManager:
         cap = s.max_storage_gb * GB
         total = self.db.usage_bytes()
         while total > cap:
-            batch = self.db.query("SELECT * FROM segments WHERE protected=0 ORDER BY start_ts LIMIT 100")
+            batch = self.db.query("SELECT * FROM segments WHERE protected=0 AND location!='agentdvr' ORDER BY start_ts LIMIT 100")
             if not batch:
                 self.events.emit("warning", "retention", "limite global excedido apenas com gravações protegidas")
                 break
