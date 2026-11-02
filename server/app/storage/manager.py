@@ -1,5 +1,8 @@
 """Armazenamento: buffer local -> pendrive SMB, saúde, retenção e reconciliação.
 
+A reprodução lê de uma cópia local no PC quando existe (ver ``mirror``): o pendrive do
+roteador demora segundos para abrir arquivos enquanto grava.
+
 Decisão de arquitetura: o FFmpeg grava SEMPRE no disco local (buffer) e um transferidor
 copia os segmentos concluídos para o SMB. Gravar direto no SMB faria qualquer oscilação
 do Wi-Fi/roteador travar o muxer e perder vídeo; com o buffer, se o pendrive sumir, a
@@ -29,6 +32,7 @@ from ..security import secrets as vault
 from ..security.paths import safe_join, is_media_file
 from . import smb
 from .agentdvr import LOCATION as AGENTDVR, AgentDvrIndex
+from .mirror import LocalMirror
 
 log = logging.getLogger("storage")
 
@@ -51,6 +55,8 @@ class StorageManager:
         self._wake_uploader = threading.Event()
         self._reconcile_lock = threading.Lock()
         self.agentdvr = AgentDvrIndex(cfg, db, events)
+        self.mirror = LocalMirror(cfg, db, self.source_path,
+                                  storage_ok=lambda: self.state.get("status") in ("ok", "degraded"))
 
     # ------------------------------------------------------------- paths
     @property
@@ -58,6 +64,11 @@ class StorageManager:
         return self.cfg.storage_root
 
     def resolve(self, seg: dict) -> Path:
+        """Caminho para leitura: a cópia local no PC, se houver; senão o arquivo original."""
+        return self.mirror.lookup(seg) or self.source_path(seg)
+
+    def source_path(self, seg: dict) -> Path:
+        """Caminho do arquivo original (buffer local, pendrive ou pasta do Agent DVR)."""
         if seg["location"] == AGENTDVR:
             return safe_join(self.cfg.agentdvr_root, seg["path"], foreign=True)
         base = self.cfg.buffer_dir if seg["location"] == "local" else self.root
@@ -79,9 +90,11 @@ class StorageManager:
             t = threading.Thread(target=target, name=name, daemon=True)
             t.start()
             self._threads.append(t)
+        self.mirror.start()
 
     def stop(self) -> None:
         self._stop.set()
+        self.mirror.stop()
         self._wake_uploader.set()
         for t in self._threads:
             t.join(10)
@@ -144,6 +157,8 @@ class StorageManager:
         r = self.db.one("SELECT COUNT(*) AS n FROM segments WHERE location='local'")
         st["upload_backlog"] = int(r["n"]) if r else 0
         st["upload_enabled"] = s.upload_enabled
+        st["local_copy_bytes"] = self.mirror.stats["bytes"]
+        st["local_copy_max_bytes"] = int(s.local_cache_gb * GB)
         st["retention_days"] = s.retention_days
         st["max_storage_bytes"] = int(s.max_storage_gb * GB)
         try:
@@ -221,6 +236,8 @@ class StorageManager:
             raise OSError("tamanho divergente após cópia")
         os.replace(tmp, dest)
         self.db.mark_segment_remote(seg["id"], rel)
+        if self.mirror.adopt(src, rel):
+            return
         try:
             src.unlink()
         except OSError:
@@ -266,7 +283,7 @@ class StorageManager:
         if seg["location"] == AGENTDVR:
             return False  # arquivo do Agent DVR: o MonitorIOS nunca apaga
         try:
-            p = self.resolve(seg)
+            p = self.source_path(seg)
         except ValueError:
             log.error("caminho inválido no índice; ignorado", extra={"ctx": {"segment": seg["id"]}})
             return False
@@ -280,6 +297,7 @@ class StorageManager:
         except OSError as e:
             log.warning("não foi possível apagar segmento", extra={"ctx": {"segment": seg["id"], "error": str(e)}})
             return False
+        self.mirror.remove(seg)
         self.db.delete_segment(seg["id"])
         self._prune_empty_dirs(p.parent)
         return True
