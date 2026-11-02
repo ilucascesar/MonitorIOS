@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import json
+import subprocess
+import threading
 import time
+from collections import OrderedDict
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 from ..recordings import timeline as tl
+from ..recordings.indexer import legacy_chunk
 from ..security.auth import Principal
 from ..streaming.hls import build_vod_playlist
 from .deps import current_principal, media_principal, playlist_response, rt
@@ -117,8 +122,73 @@ def playback_playlist(cam_id: int, request: Request, start: float, end: float):
         raise HTTPException(404, "sem gravações no intervalo")
     mt = request.query_params.get("mt", "")
     suffix = f"?{urlencode({'mt': mt})}" if mt else ""
-    text = build_vod_playlist(segs, lambda s: f"/api/v1/media/{s['id']}.{s['container']}{suffix}", start, end)
+    def url_for(s: dict, part: int | None = None) -> str:
+        if part is not None:
+            return f"/api/v1/media/{s['id']}/{part}.ts{suffix}"
+        return f"/api/v1/media/{s['id']}.{s['container']}{suffix}"
+
+    text = build_vod_playlist(segs, url_for, start, end)
     return playlist_response(request, text)
+
+
+class _ChunkCache:
+    """Últimos trechos remuxados do Agent DVR em memória (o AVPlayer pede a mesma parte de novo ao
+    voltar alguns segundos na linha do tempo)."""
+
+    def __init__(self, max_bytes: int = 64 * 1024 * 1024):
+        self.max_bytes = max_bytes
+        self._items: OrderedDict[tuple[int, int], bytes] = OrderedDict()
+        self._size = 0
+        self._lock = threading.Lock()
+
+    def get(self, key):
+        with self._lock:
+            data = self._items.get(key)
+            if data is not None:
+                self._items.move_to_end(key)
+            return data
+
+    def put(self, key, data: bytes) -> None:
+        with self._lock:
+            if key in self._items:
+                return
+            self._items[key] = data
+            self._size += len(data)
+            while self._size > self.max_bytes and self._items:
+                _k, old = self._items.popitem(last=False)
+                self._size -= len(old)
+
+
+_chunks = _ChunkCache()
+
+
+@router.get("/media/{seg_id}/{part}.ts")
+def legacy_media_part(seg_id: int, part: int, request: Request):
+    """Trecho de uma gravação do Agent DVR, remuxado de MKV para MPEG-TS sem recodificar."""
+    runtime = rt(request)
+    seg = runtime.db.get_segment(seg_id)
+    if not seg or seg["container"] != "mkv":
+        raise HTTPException(404, "segmento não encontrado")
+    media_principal(request, f"cam:{seg['camera_id']}")
+    parts = json.loads(seg["parts"] or "[]")
+    if not 0 <= part < len(parts):
+        raise HTTPException(404, "parte não encontrada")
+    headers = {"Cache-Control": "private, max-age=86400"}
+    data = _chunks.get((seg_id, part))
+    if data is None:
+        try:
+            path = runtime.storage.resolve(seg)
+        except ValueError:
+            raise HTTPException(404, "segmento não encontrado")
+        if not path.is_file():
+            raise HTTPException(503, "arquivo indisponível (armazenamento offline?)")
+        nxt = parts[part + 1][0] if part + 1 < len(parts) else None
+        try:
+            data = legacy_chunk(runtime.cfg.ffmpeg, path, parts[part][0], nxt)
+        except (OSError, subprocess.TimeoutExpired):
+            raise HTTPException(503, "não foi possível ler a gravação do Agent DVR")
+        _chunks.put((seg_id, part), data)
+    return Response(content=data, media_type="video/mp2t", headers=headers)
 
 
 @router.get("/media/{seg_id}.{ext}")
