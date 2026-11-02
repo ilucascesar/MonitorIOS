@@ -62,6 +62,8 @@ class Runtime:
 
     def apply_camera_changes(self, cam_id: int | None = None) -> None:
         self.supervisor.sync()
+        # Câmera nova pode já ter vídeos do MonitorIOS no pendrive (reinstalação): indexa-os.
+        self.storage.request_reconcile()
         if cam_id is not None:
             self.live.stop_camera(cam_id)
         self.events.bump()
