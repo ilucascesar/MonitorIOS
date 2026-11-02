@@ -60,6 +60,16 @@ final class APIClient: @unchecked Sendable {
         return URL(string: pathAndQuery, relativeTo: baseURL)?.absoluteURL
     }
 
+    /// URL WebSocket (ws/wss) para um caminho da API, no mesmo servidor e porta.
+    func webSocketURL(_ path: String, query: [URLQueryItem] = []) -> URL? {
+        guard let baseURL, var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return nil }
+        comps.scheme = comps.scheme?.lowercased() == "https" ? "wss" : "ws"
+        let base = comps.path.hasSuffix("/") ? String(comps.path.dropLast()) : comps.path
+        comps.path = base + path
+        comps.queryItems = query.isEmpty ? nil : query
+        return comps.url
+    }
+
     private func makeRequest(_ path: String, query: [URLQueryItem], method: String, body: [String: Any]?) throws -> URLRequest {
         let relative = path.hasPrefix("/") ? String(path.dropFirst()) : path
         guard let baseURL, var comps = URLComponents(url: baseURL.appendingPathComponent(relative), resolvingAgainstBaseURL: false) else {
