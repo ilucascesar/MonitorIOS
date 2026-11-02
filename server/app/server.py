@@ -25,7 +25,9 @@ class ServerHandle:
             ssl = {"ssl_certfile": s.tls_certfile, "ssl_keyfile": s.tls_keyfile}
         config = uvicorn.Config(
             app, host=s.http_host, port=s.http_port, log_config=None, access_log=False,
-            proxy_headers=False, timeout_graceful_shutdown=10, ws_ping_interval=20, ws_ping_timeout=20, **ssl,
+            proxy_headers=False, timeout_graceful_shutdown=10, ws_ping_interval=20, ws_ping_timeout=20,
+            # Vídeo já é comprimido: deflate só gastaria CPU e acrescentaria atraso.
+            ws_per_message_deflate=False, **ssl,
         )
         self.server = uvicorn.Server(config)
 

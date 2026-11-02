@@ -14,6 +14,8 @@ from .recordings.export import ExportManager
 from .recordings.supervisor import RecordingSupervisor
 from .security.auth import AuthService
 from .storage.manager import StorageManager
+from .cameras.urls import build_stream_url
+from .streaming.hub import HubManager
 from .streaming.live import LiveManager
 
 log = logging.getLogger("runtime")
@@ -29,6 +31,7 @@ class Runtime:
         self.supervisor = RecordingSupervisor(self.cfg, self.db, self.events)
         self.storage = StorageManager(self.cfg, self.db, self.events, self.supervisor.active_files)
         self.live = LiveManager(self.cfg)
+        self.hubs = HubManager(self.cfg, self.db, build_stream_url)
         self.exports = ExportManager(self.cfg, self.db, self.storage, self.events)
         self.started_at = time.time()
         self.version = __version__
@@ -45,6 +48,7 @@ class Runtime:
         self.storage.start()
         self.supervisor.start()
         self.live.start()
+        self.hubs.start()
         self.exports.start()
         self.cameras.start_health()
 
@@ -54,6 +58,7 @@ class Runtime:
         self._running = False
         log.info("servidor encerrando")
         self.cameras.stop()
+        self.hubs.stop()
         self.live.stop()
         self.supervisor.stop()   # fecha os segmentos em andamento com 'q' (arquivos válidos)
         self.exports.stop()
@@ -66,4 +71,7 @@ class Runtime:
         self.storage.request_reconcile()
         if cam_id is not None:
             self.live.stop_camera(cam_id)
+        if self._running:
+            # Reabre só o que mudou (URL/senha nova, câmera removida ou com ao vivo desligado).
+            self.hubs.sync()
         self.events.bump()

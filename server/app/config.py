@@ -55,15 +55,24 @@ class Settings(BaseModel):
 
     # Gravação
     segment_seconds: int = Field(60, ge=10, le=900)
-    hls_part_seconds: float = Field(10.0, ge=2, le=60)
+    hls_part_seconds: float = Field(4.0, ge=2, le=60)
     stall_timeout_seconds: int = Field(30, ge=10)
     ffmpeg_path: str = ""
     ffprobe_path: str = ""
+
+    # Cópia local das gravações no disco do PC (o pendrive do roteador demora segundos para abrir
+    # arquivos enquanto grava). 0 desliga: tudo passa a ser lido do pendrive.
+    local_cache_gb: float = Field(40.0, ge=0)
 
     # Ao vivo
     live_idle_timeout_seconds: int = Field(45, ge=10)
     live_max_processes: int = Field(8, ge=1)
     live_hls_time: int = Field(2, ge=1, le=10)
+    # Mantém a conexão com cada câmera aberta: o app vê a imagem na hora, sem esperar o RTSP.
+    live_always_on: bool = True
+
+    # Versão do formato do settings.json (migrações de padrões antigos).
+    schema_version: int = 1
 
     log_level: str = "INFO"
 
@@ -74,6 +83,22 @@ class Settings(BaseModel):
         if v not in {"DEBUG", "INFO", "WARNING", "ERROR"}:
             raise ValueError("log_level inválido")
         return v
+
+
+SCHEMA_VERSION = 2
+
+
+def _migrate(raw: dict) -> bool:
+    """Atualiza padrões antigos que o usuário não alterou. Devolve True se mudou algo."""
+    version = int(raw.get("schema_version") or 1)
+    if version >= SCHEMA_VERSION:
+        return False
+    if version < 2:
+        # Partes de 4 s: o app começa a tocar e pula na linha do tempo baixando bem menos.
+        if raw.get("hls_part_seconds") == 10.0:
+            raw["hls_part_seconds"] = 4.0
+    raw["schema_version"] = SCHEMA_VERSION
+    return True
 
 
 class Config:
@@ -108,6 +133,11 @@ class Config:
     @property
     def cache_dir(self) -> Path:
         return self.data_dir / "cache"
+
+    @property
+    def mirror_dir(self) -> Path:
+        """Cópia local das gravações (mesmos caminhos relativos do pendrive)."""
+        return self.data_dir / "mirror"
 
     @property
     def buffer_dir(self) -> Path:
@@ -147,8 +177,12 @@ class Config:
     def _load(self) -> Settings:
         if self.settings_path.is_file():
             raw = json.loads(self.settings_path.read_text(encoding="utf-8-sig"))
+            if _migrate(raw):
+                s = Settings.model_validate(raw)
+                self._write(s)
+                return s
             return Settings.model_validate(raw)
-        s = Settings()
+        s = Settings(schema_version=SCHEMA_VERSION)
         self._write(s)
         return s
 
