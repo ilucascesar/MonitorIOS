@@ -37,6 +37,33 @@ def gaps(intervals: list[tuple[float, float]], start: float, end: float, min_gap
     return out
 
 
+MIN_PIECE = 1.0
+
+
+def prefer_own(segments: list[dict]) -> list[tuple[dict, float, float]]:
+    """Trechos reproduzíveis ``(segmento, início, fim)`` em ordem: gravações próprias inteiras e
+    as do Agent DVR (mesmo período gravado pelos dois sistemas) só onde não há gravação própria."""
+    own = merge_intervals([(s["start_ts"], s["end_ts"]) for s in segments if s.get("location") != "agentdvr"])
+    out: list[tuple[dict, float, float]] = []
+    for s in segments:
+        if s.get("location") != "agentdvr":
+            out.append((s, s["start_ts"], s["end_ts"]))
+            continue
+        cursor = s["start_ts"]
+        for a, b in own:
+            if b <= cursor:
+                continue
+            if a >= s["end_ts"]:
+                break
+            if a - cursor >= MIN_PIECE:
+                out.append((s, cursor, a))
+            cursor = max(cursor, b)
+        if s["end_ts"] - cursor >= MIN_PIECE:
+            out.append((s, cursor, s["end_ts"]))
+    out.sort(key=lambda p: (p[1], p[0].get("id", 0)))
+    return out
+
+
 def locate(intervals: list[tuple[float, float]], t: float) -> dict:
     """Diz se ``t`` está gravado; caso contrário aponta o próximo e o anterior disponíveis."""
     prev_end = None

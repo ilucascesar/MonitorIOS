@@ -58,7 +58,7 @@ def probe_segment(ffprobe: str, path: Path, part_target: float = 10.0, timeout: 
         return ProbeResult(False, error=f"stat: {e}")
     if size < TS_PACKET * 10:
         return ProbeResult(False, size=size, error="arquivo vazio ou truncado")
-    container = "mp4" if path.suffix.lower() == ".mp4" else "ts"
+    container = {".mp4": "mp4", ".mkv": "mkv"}.get(path.suffix.lower(), "ts")
     cmd = [
         ffprobe, "-v", "error", "-select_streams", "v:0",
         "-show_entries", "packet=pts_time,dts_time,pos,flags:stream=codec_name,width,height,avg_frame_rate,r_frame_rate",
@@ -103,6 +103,9 @@ def probe_segment(ffprobe: str, path: Path, part_target: float = 10.0, timeout: 
 
     if container == "ts":
         parts = _ts_parts(path, size, keyframes, first, end, part_target)
+        init_len = 0
+    elif container == "mkv":
+        parts = _time_parts(keyframes, first, end, part_target)
         init_len = 0
     else:
         parts, init_len = _mp4_parts(path, size, keyframes, first, end, part_target)
@@ -155,6 +158,33 @@ def _ts_parts(path: Path, size: int, keyframes, first: float, end: float, target
         nxt_off, nxt_t = (splits[i + 1] if i + 1 < len(splits) else (size, end))
         parts.append([off, nxt_off - off, round(max(0.001, nxt_t - t), 3)])
     return parts
+
+
+def _time_parts(keyframes, first: float, end: float, target: float) -> list[list[float]]:
+    """MKV do Agent DVR não serve em byte-range: cada parte é [pts do keyframe, 0, duração] e é
+    remuxada para MPEG-TS sob demanda (``legacy_chunk``)."""
+    starts = [first]
+    for t, _pos in keyframes:
+        if t - starts[-1] >= target and end - t >= target * 0.3:
+            starts.append(t)
+    return [[round(t, 3), 0, round(max(0.001, (starts[i + 1] if i + 1 < len(starts) else end) - t), 3)]
+            for i, t in enumerate(starts)]
+
+
+def legacy_chunk(ffmpeg: str, path: Path, start_pts: float, end_pts: float | None, timeout: float = 60) -> bytes:
+    """Remuxa (sem recodificar) um trecho entre keyframes de um MKV em MPEG-TS para o HLS.
+    ``-copyts`` mantém os timestamps originais: partes vizinhas emendam sem descontinuidade.
+    O áudio G.711 do Agent DVR não toca no iPhone e é descartado (as gravações próprias também são mudas)."""
+    cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", f"{start_pts:.3f}"]
+    if end_pts is not None:
+        cmd += ["-to", f"{end_pts:.3f}"]
+    cmd += ["-i", str(path), "-map", "0:v:0", "-an", "-c", "copy", "-copyts",
+            "-muxdelay", "0", "-muxpreload", "0", "-f", "mpegts", "pipe:1"]
+    cp = _run(cmd, timeout)
+    if cp.returncode != 0 or not cp.stdout:
+        err = cp.stderr.decode("utf-8", "replace").strip().splitlines()
+        raise OSError((err[-1] if err else f"ffmpeg saiu com {cp.returncode}")[:300])
+    return cp.stdout
 
 
 def _iter_boxes(f, size: int):
