@@ -6,12 +6,16 @@
   mostrar o horário real e ``seek(to: Date)`` para pular para um horário da linha do tempo.
 - ``EXT-X-DISCONTINUITY`` em lacunas e trocas de execução do FFmpeg (timestamps reiniciam).
 - H.264 é servido em MPEG-TS; H.265 em fMP4 com ``EXT-X-MAP`` (exigência da Apple).
+- MKV do Agent DVR (somente leitura) vira partes remuxadas sob demanda, sem byte-range, e só
+  aparece onde não há gravação própria do mesmo horário.
 """
 from __future__ import annotations
 
 import json
 import math
 from datetime import datetime, timezone
+
+from ..recordings.timeline import prefer_own
 
 GAP_DISCONTINUITY = 1.5
 
@@ -20,14 +24,53 @@ def _pdt(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def _legacy_parts(lines: list[str], seg: dict, parts, clip_a: float, clip_b: float, url_for,
+                  start: float | None, end: float | None, prev_key) -> tuple[float, tuple | None]:
+    """MKV do Agent DVR: cada parte é um trecho remuxado sob demanda (``url_for(seg, i)``), sem
+    byte-range. Partes em que existe gravação própria (fora de ``clip_a..clip_b``) são puladas."""
+    max_dur = 0.0
+    t0 = parts[0][0]
+    total = sum(p[2] for p in parts) or seg["duration"]
+    scale = seg["duration"] / total if total else 1.0
+    for i, (pts, _len, dur) in enumerate(parts):
+        t = seg["start_ts"] + (pts - t0) * scale
+        d = dur * scale
+        if not clip_a <= t + d / 2 < clip_b:
+            continue
+        if end is not None and t >= end:
+            break
+        if start is not None and t + d <= start:
+            continue
+        if prev_key is not None and prev_key != (seg["id"], i - 1):
+            lines.append("#EXT-X-DISCONTINUITY")
+        max_dur = max(max_dur, d)
+        lines.append(f"#EXT-X-PROGRAM-DATE-TIME:{_pdt(t)}")
+        lines.append(f"#EXTINF:{d:.3f},")
+        lines.append(url_for(seg, i))
+        prev_key = (seg["id"], i)
+    return max_dur, prev_key
+
+
 def build_vod_playlist(segments: list[dict], url_for, start: float | None = None, end: float | None = None) -> str:
-    """``url_for(seg)`` devolve a URL do arquivo do segmento (já com token de mídia)."""
+    """``url_for(seg)`` devolve a URL do arquivo do segmento (já com token de mídia); para MKV do
+    Agent DVR, ``url_for(seg, parte)`` devolve a URL do trecho remuxado."""
     lines: list[str] = []
     max_dur = 1.0
     prev = None
+    prev_key = None  # (id, parte) da última entrada do Agent DVR, para emendar partes vizinhas
     uses_fmp4 = False
-    for seg in segments:
+    for seg, clip_a, clip_b in prefer_own(segments):
         parts = json.loads(seg["parts"]) if isinstance(seg["parts"], str) else seg["parts"]
+        if seg["container"] == "mkv":
+            if parts:
+                # Vindo de gravação própria, a chave ("own",) força a descontinuidade.
+                entry = prev_key if prev_key is not None else (("own",) if prev is not None else None)
+                d, key = _legacy_parts(lines, seg, parts, clip_a, clip_b, url_for, start, end, entry)
+                if key != entry:
+                    prev_key, prev = key, seg
+                    max_dur = max(max_dur, d)
+            continue
+        prev_key = None
         if not parts:
             parts = [[seg["init_len"], seg["size"] - seg["init_len"], seg["duration"]]]
         # Escala as durações das partes para bater com a duração real indexada.
