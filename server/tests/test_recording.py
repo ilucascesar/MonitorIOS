@@ -65,9 +65,13 @@ def test_continuous_recording_index_upload_and_playlist(runtime, source_video):
     runtime.storage.stop()
     for r in segs(runtime, cam_id):
         assert r["location"] == "remote"
-        p = runtime.storage.resolve(r)
+        p = runtime.storage.source_path(r)
         assert p.is_file() and p.stat().st_size == r["size"]
         assert p.relative_to(runtime.cfg.storage_root).parts[0] == "Teste"
+        # O arquivo do buffer virou a cópia local, de onde a reprodução lê.
+        local = runtime.storage.resolve(r)
+        assert local.relative_to(runtime.cfg.mirror_dir) == p.relative_to(runtime.cfg.storage_root)
+        assert local.read_bytes() == p.read_bytes()
     assert not any(runtime.cfg.buffer_dir.joinpath("Teste").glob("*.ts"))
 
     # Partes em byte-range começam em pacotes TS válidos (PAT)
