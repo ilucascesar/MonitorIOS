@@ -48,6 +48,10 @@ class Settings(BaseModel):
     # Pendrive atual: 32 GB, compartilhado com o Agent DVR durante a migração.
     max_storage_gb: float = Field(18.0, gt=0)
     min_free_gb: float = Field(2.0, ge=0)
+    # Gravações antigas do Agent DVR na linha do tempo (somente leitura: nunca movidas nem apagadas).
+    agentdvr_playback: bool = True
+    agentdvr_media_dir: str = ""  # vazio = pasta "video" ao lado da raiz do MonitorIOS
+    agentdvr_objects: str = r"C:\Program Files\Agent\Media\XML\objects.json"
 
     # Gravação
     segment_seconds: int = Field(60, ge=10, le=900)
@@ -113,6 +117,11 @@ class Config:
     @property
     def storage_root(self) -> Path:
         return Path(self.settings.storage_root)
+
+    @property
+    def agentdvr_root(self) -> Path:
+        s = self.settings.agentdvr_media_dir
+        return Path(s) if s else self.storage_root.parent / "video"
 
     # ------------------------------------------------------------ ffmpeg
     def _find_tool(self, configured: str, name: str) -> str:
