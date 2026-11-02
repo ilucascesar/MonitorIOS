@@ -8,9 +8,11 @@ from pathlib import Path
 
 MEDIA_EXTENSIONS = {".ts", ".mp4"}
 _SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9_.\-]+$")
+# Pastas criadas pelo Agent DVR (só leitura) podem ter parênteses e espaços, ex.: "volume(sda1)".
+_FOREIGN_COMPONENT = re.compile(r"^[A-Za-z0-9_.\-() ]+$")
 
 
-def safe_join(root: Path | str, rel: str) -> Path:
+def safe_join(root: Path | str, rel: str, foreign: bool = False) -> Path:
     """Junta ``rel`` a ``root`` garantindo que o resultado fique dentro de ``root``."""
     if not rel or "\x00" in rel:
         raise ValueError("caminho vazio")
@@ -18,7 +20,8 @@ def safe_join(root: Path | str, rel: str) -> Path:
     if rel_norm.startswith("/"):
         raise ValueError("caminho absoluto não permitido")
     parts = [p for p in rel_norm.split("/") if p]
-    if any(p in (".", "..") or not _SAFE_COMPONENT.match(p) for p in parts):
+    pattern = _FOREIGN_COMPONENT if foreign else _SAFE_COMPONENT
+    if any(p in (".", "..") or p != p.strip() or not pattern.match(p) for p in parts):
         raise ValueError("componente de caminho inválido")
     root_abs = os.path.abspath(str(root))
     full = os.path.abspath(os.path.join(root_abs, *parts))
