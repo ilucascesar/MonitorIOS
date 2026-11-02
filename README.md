@@ -29,7 +29,8 @@ iPhone ◄── HLS (ao vivo / VOD com horário real) ◄── FastAPI :8765 �
 
 ## Início rápido (servidor)
 
-No PowerShell **como Administrador**, na pasta `server`:
+Dê dois cliques em **`server\instalar.cmd`** e aceite o pedido de Administrador. Pelo terminal, no
+PowerShell **como Administrador**, na pasta `server`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
