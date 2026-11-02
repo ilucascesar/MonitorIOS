@@ -13,7 +13,9 @@ Docker, WSL e Frigate não são usados.
 
 ## Instalação
 
-PowerShell **como Administrador**, na pasta `server`:
+O jeito mais simples é dar **dois cliques em `server\instalar.cmd`**: ele pede a permissão de
+Administrador sozinho e roda o instalador. Para rodar pelo terminal, use o PowerShell **como
+Administrador**, na pasta `server`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1            # porta 8765 por padrão
@@ -35,6 +37,10 @@ O instalador:
    falha (5 s, 15 s e 60 s), e aguarda o `/api/v1/health` responder.
 
 Rodar o instalador de novo atualiza o serviço sem apagar dados.
+
+Se o MonitorIOS for reinstalado ou o índice for perdido, os vídeos que já estão no pendrive voltam
+a ser indexados sozinhos assim que as câmeras são cadastradas ou importadas. Também é possível
+forçar a reindexação no painel: **Armazenamento → Reconciliar índice**.
 
 ## Operação
 
