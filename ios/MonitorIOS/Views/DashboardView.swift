@@ -3,7 +3,8 @@ import SwiftUI
 struct DashboardView: View {
     @EnvironmentObject var model: AppModel
     @AppStorage("dashboard.columns") private var columns = 2
-    @AppStorage("dashboard.liveGrid") private var liveGrid = false
+    // Ao vivo na grade por padrão: o servidor mantém as câmeras conectadas, então abre na hora.
+    @AppStorage("dashboard.liveGrid.v2") private var liveGrid = true
 
     var body: some View {
         NavigationStack {
@@ -15,10 +16,22 @@ struct DashboardView: View {
                     } else {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: max(1, columns)), spacing: 10) {
                             ForEach(model.cameras) { cam in
-                                NavigationLink(value: cam) {
-                                    CameraTile(camera: cam, state: model.state(for: cam.id), live: liveGrid && cam.liveEnabled)
+                                ZStack(alignment: .bottomTrailing) {
+                                    NavigationLink(value: CameraRoute(camera: cam)) {
+                                        CameraTile(camera: cam, state: model.state(for: cam.id), live: liveGrid && cam.liveEnabled)
+                                    }
+                                    .buttonStyle(.plain)
+                                    // Atalho direto para as gravações da câmera.
+                                    NavigationLink(value: CameraRoute(camera: cam, recordings: true)) {
+                                        Image(systemName: "clock.arrow.circlepath")
+                                            .font(.subheadline.weight(.semibold))
+                                            .frame(width: 34, height: 34)
+                                            .background(Color.accentColor.opacity(0.18), in: Circle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(6)
+                                    .accessibilityLabel("Gravações de \(cam.name)")
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -28,7 +41,7 @@ struct DashboardView: View {
             }
             .refreshable { await model.refreshAll() }
             .navigationTitle("Câmeras")
-            .navigationDestination(for: Camera.self) { cam in CameraDetailView(camera: cam) }
+            .navigationDestination(for: CameraRoute.self) { r in CameraDetailView(camera: r.camera, startInRecordings: r.recordings) }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button {
@@ -134,18 +147,21 @@ struct CameraTile: View {
     }
 }
 
-/// Fluxo secundário (baixa resolução) para a grade ao vivo.
+/// Miniatura ao vivo da grade (mesma conexão permanente do servidor: abre na hora).
 struct MiniLivePlayer: View {
     @EnvironmentObject var model: AppModel
     let cameraId: Int
-    @StateObject private var live = LivePlayerModel(quality: "sub")
+    @StateObject private var live = LivePlayerModel(quality: "main")
 
     var body: some View {
         ZStack {
-            PlayerLayerView(player: live.player, gravity: .resizeAspectFill)
-            if live.state == .loading { ProgressView().tint(.white) }
-            if case .failed = live.state {
-                Image(systemName: "exclamationmark.triangle").foregroundStyle(.yellow)
+            LiveVideoView(view: live.renderView, gravity: .resizeAspectFill)
+            if !live.hasImage {
+                if case .failed = live.state {
+                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.yellow)
+                } else {
+                    ProgressView().tint(.white)
+                }
             }
         }
         .onAppear { live.start(cameraId: cameraId, api: model.api) }
