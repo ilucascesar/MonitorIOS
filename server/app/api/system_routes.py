@@ -128,7 +128,7 @@ def maintenance(task: str, request: Request, _: Principal = Depends(require_admi
     if task == "retention":
         return runtime.storage.run_retention()
     if task == "reconcile":
-        return {"buffer": runtime.supervisor.reconcile_buffer(), **runtime.storage.reconcile_remote()}
+        return {"buffer": runtime.supervisor.reconcile_buffer(), **runtime.storage.reconcile_remote(wait=False)}
     raise HTTPException(404, "tarefa desconhecida")
 
 
