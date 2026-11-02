@@ -305,6 +305,14 @@ class LiveHub:
     def _kill(self) -> None:
         proc = self._proc
         if proc and proc.poll() is None:
+            if sys.platform == "win32":
+                # Árvore inteira: um ffmpeg.exe instalado como "shim" (Chocolatey, Scoop) roda o
+                # FFmpeg real como filho, que continuaria segurando a câmera e o pipe.
+                try:
+                    subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW, timeout=10, check=False)
+                except (OSError, subprocess.TimeoutExpired):
+                    pass
             try:
                 proc.kill()
             except OSError:
