@@ -273,8 +273,7 @@ class StorageManager:
         self._stop.wait(30)
         while not self._stop.is_set():
             try:
-                if self.state.get("status") in ("ok", "degraded"):
-                    self.agentdvr.scan()
+                self.agentdvr.scan()  # a pasta do Agent pode estar no PC: não depende do pendrive
             except Exception:
                 log.exception("erro ao indexar gravações do Agent DVR")
             self._stop.wait(600)
