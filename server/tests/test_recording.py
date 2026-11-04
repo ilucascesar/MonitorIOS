@@ -35,7 +35,8 @@ def segs(runtime, cam_id):
     return runtime.db.query("SELECT * FROM segments WHERE camera_id=? ORDER BY start_ts", (cam_id,))
 
 
-def test_continuous_recording_index_upload_and_playlist(runtime, source_video):
+def test_continuous_recording_index_upload_and_playlist(runtime, source_video, monkeypatch):
+    monkeypatch.setattr(runtime.storage.mirror, "storage_remote", lambda: True)  # "pendrive" do teste é pasta local
     runtime.cfg.update({"segment_seconds": 10, "hls_part_seconds": 3})
     cam_id = make_camera(runtime, source_video)
     runtime.storage.check_health()

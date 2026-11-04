@@ -196,13 +196,16 @@ def _remote_segment(runtime, cam, name, start, payload=b"\x47" + b"\x00" * 187):
     return runtime.db.get_segment(sid)
 
 
-def test_local_copy_serves_playback_and_follows_retention(runtime):
+def test_local_copy_serves_playback_and_follows_retention(runtime, monkeypatch):
     runtime.storage.check_health()
     runtime.auth.create_user("admin", ADMIN_PW, "admin")
     cam = runtime.db.insert_camera({"name": "Garagem", "host": "10.0.0.8", "folder": "Garagem", "record_enabled": 0})
     now = time.time()
     segs = [_remote_segment(runtime, cam, f"r1_{i}.ts", now - 3600 + i * 60) for i in range(4)]
     mirror = runtime.storage.mirror
+    # Gravações já no disco do PC: lidas direto, sem cópia duplicada.
+    assert mirror.path_for(segs[0]) is None and runtime.storage.resolve(segs[0]) == runtime.storage.source_path(segs[0])
+    monkeypatch.setattr(mirror, "storage_remote", lambda: True)  # a partir daqui, como se fosse o roteador
     assert mirror.lookup(segs[0]) is None
 
     with TestClient(create_app(runtime), client=("127.0.0.1", 50000)) as c:
