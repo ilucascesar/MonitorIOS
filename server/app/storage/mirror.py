@@ -63,8 +63,13 @@ class LocalMirror:
         if seg["location"] == "remote":
             return safe_join(self.root, seg["path"])
         if seg["location"] == "agentdvr":
+            if not self.agentdvr_remote():
+                return None  # Agent DVR já grava no disco do PC: copiar só duplicaria
             return safe_join(self.root / AGENTDVR_DIR, seg["path"], foreign=True)
         return None
+
+    def agentdvr_remote(self) -> bool:
+        return str(self.cfg.agentdvr_root).startswith("\\\\")
 
     def lookup(self, seg: dict) -> Path | None:
         if not self.enabled:
