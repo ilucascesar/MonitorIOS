@@ -28,16 +28,16 @@ def _tz(name: str) -> ZoneInfo:
     try:
         return ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError):
-        raise HTTPException(422, "fuso horÃ¡rio invÃ¡lido")
+        raise HTTPException(422, "fuso horário inválido")
 
 
 def _cam(request: Request, cam_id: int) -> dict:
     cam = rt(request).db.get_camera(cam_id)
     if not cam:
-        # CÃ¢meras removidas continuam consultÃ¡veis atÃ© a retenÃ§Ã£o apagar as gravaÃ§Ãµes.
+        # Câmeras removidas continuam consultáveis até a retenção apagar as gravações.
         cam = rt(request).db.one("SELECT * FROM cameras WHERE id=?", (cam_id,))
     if not cam:
-        raise HTTPException(404, "cÃ¢mera nÃ£o encontrada")
+        raise HTTPException(404, "câmera não encontrada")
     return cam
 
 
@@ -45,7 +45,7 @@ def _check_range(start: float, end: float) -> None:
     if end <= start:
         raise HTTPException(422, "end deve ser maior que start")
     if end - start > MAX_RANGE:
-        raise HTTPException(422, "intervalo mÃ¡ximo de 3 dias")
+        raise HTTPException(422, "intervalo máximo de 3 dias")
 
 
 @router.get("/cameras/{cam_id}/days")
@@ -95,7 +95,7 @@ def locate(cam_id: int, request: Request, t: float, _: Principal = Depends(curre
 
 @router.get("/cameras/{cam_id}/playback")
 def playback_info(cam_id: int, request: Request, start: float, end: float, p: Principal = Depends(current_principal)):
-    """Devolve a URL da playlist (com token de mÃ­dia) e os intervalos para a linha do tempo."""
+    """Devolve a URL da playlist (com token de mídia) e os intervalos para a linha do tempo."""
     runtime = rt(request)
     _cam(request, cam_id)
     _check_range(start, end)
@@ -120,7 +120,7 @@ def playback_playlist(cam_id: int, request: Request, start: float, end: float):
     runtime = rt(request)
     segs = runtime.db.segments_in_range(cam_id, start, end)
     if not segs:
-        raise HTTPException(404, "sem gravaÃ§Ãµes no intervalo")
+        raise HTTPException(404, "sem gravações no intervalo")
     mt = request.query_params.get("mt", "")
     suffix = f"?{urlencode({'mt': mt})}" if mt else ""
     def url_for(s: dict, part: int | None = None) -> str:
@@ -133,7 +133,7 @@ def playback_playlist(cam_id: int, request: Request, start: float, end: float):
 
 
 class _ChunkCache:
-    """Ãšltimos trechos remuxados do Agent DVR em memÃ³ria (o AVPlayer pede a mesma parte de novo ao
+    """Últimos trechos remuxados do Agent DVR em memória (o AVPlayer pede a mesma parte de novo ao
     voltar alguns segundos na linha do tempo)."""
 
     def __init__(self, max_bytes: int = 64 * 1024 * 1024):
@@ -178,7 +178,7 @@ def _chunk_ahead(runtime, seg: dict, parts: list, part: int) -> None:
     try:
         if _chunks.get(key) is None:
             _chunks.put(key, _make_chunk(runtime, seg, parts, part))
-    except Exception:  # noqa: BLE001 - adiantamento Ã© opcional
+    except Exception:  # noqa: BLE001 - adiantamento é opcional
         pass
     finally:
         _ahead_pending.discard(key)
@@ -186,15 +186,15 @@ def _chunk_ahead(runtime, seg: dict, parts: list, part: int) -> None:
 
 @router.get("/media/{seg_id}/{part}.ts")
 def legacy_media_part(seg_id: int, part: int, request: Request):
-    """Trecho de uma gravaÃ§Ã£o do Agent DVR, remuxado de MKV para MPEG-TS sem recodificar."""
+    """Trecho de uma gravação do Agent DVR, remuxado de MKV para MPEG-TS sem recodificar."""
     runtime = rt(request)
     seg = runtime.db.get_segment(seg_id)
     if not seg or seg["container"] != "mkv":
-        raise HTTPException(404, "segmento nÃ£o encontrado")
+        raise HTTPException(404, "segmento não encontrado")
     media_principal(request, f"cam:{seg['camera_id']}")
     parts = json.loads(seg["parts"] or "[]")
     if not 0 <= part < len(parts):
-        raise HTTPException(404, "parte nÃ£o encontrada")
+        raise HTTPException(404, "parte não encontrada")
     headers = {"Cache-Control": "private, max-age=86400"}
     runtime.storage.mirror.prefetch_after(seg)
     data = _chunks.get((seg_id, part))
@@ -202,11 +202,11 @@ def legacy_media_part(seg_id: int, part: int, request: Request):
         try:
             data = _make_chunk(runtime, seg, parts, part)
         except ValueError:
-            raise HTTPException(404, "segmento nÃ£o encontrado")
+            raise HTTPException(404, "segmento não encontrado")
         except FileNotFoundError:
-            raise HTTPException(503, "arquivo indisponÃ­vel (armazenamento offline?)")
+            raise HTTPException(503, "arquivo indisponível (armazenamento offline?)")
         except (OSError, subprocess.TimeoutExpired):
-            raise HTTPException(503, "nÃ£o foi possÃ­vel ler a gravaÃ§Ã£o do Agent DVR")
+            raise HTTPException(503, "não foi possível ler a gravação do Agent DVR")
         _chunks.put((seg_id, part), data)
     # Os dois trechos seguintes ficam prontos antes de o player pedir.
     for nxt in (part + 1, part + 2):
@@ -222,18 +222,18 @@ def media_segment(seg_id: int, ext: str, request: Request):
     runtime = rt(request)
     seg = runtime.db.get_segment(seg_id)
     if not seg or ext != seg["container"]:
-        raise HTTPException(404, "segmento nÃ£o encontrado")
+        raise HTTPException(404, "segmento não encontrado")
     media_principal(request, f"cam:{seg['camera_id']}")
     try:
-        # Primeiro trecho pedido de um segmento que sÃ³ estÃ¡ no pendrive: copia o arquivo inteiro
-        # (~5 MB) para o PC; os demais trechos e os prÃ³ximos minutos jÃ¡ saem do disco local.
+        # Primeiro trecho pedido de um segmento que só está no pendrive: copia o arquivo inteiro
+        # (~5 MB) para o PC; os demais trechos e os próximos minutos já saem do disco local.
         runtime.storage.mirror.ensure(seg)
         runtime.storage.mirror.prefetch_after(seg)
         path = runtime.storage.resolve(seg)
     except ValueError:
-        raise HTTPException(404, "segmento nÃ£o encontrado")
+        raise HTTPException(404, "segmento não encontrado")
     if not path.is_file():
-        raise HTTPException(503 if seg["location"] == "remote" else 404, "arquivo indisponÃ­vel (armazenamento offline?)")
+        raise HTTPException(503 if seg["location"] == "remote" else 404, "arquivo indisponível (armazenamento offline?)")
     mime = "video/mp2t" if ext == "ts" else "video/mp4"
     return FileResponse(path, media_type=mime, headers={"Cache-Control": "private, max-age=86400"})
 
@@ -288,7 +288,7 @@ def get_export(job_id: str, request: Request, p: Principal = Depends(current_pri
     runtime = rt(request)
     job = runtime.exports.get(job_id)
     if not job or (job["user_id"] != p.user_id and not p.is_admin):
-        raise HTTPException(404, "exportaÃ§Ã£o nÃ£o encontrada")
+        raise HTTPException(404, "exportação não encontrada")
     if job["status"] == "done":
         mt = runtime.auth.issue_media_token(p, f"export:{job_id}", 3600)
         job["download_url"] = f"/api/v1/exports/{job_id}/download?{urlencode({'mt': mt})}"
@@ -301,10 +301,10 @@ def download_export(job_id: str, request: Request):
     runtime = rt(request)
     job = runtime.exports.get(job_id)
     if not job or (job["user_id"] != p.user_id and not p.is_admin):
-        raise HTTPException(404, "exportaÃ§Ã£o nÃ£o encontrada")
+        raise HTTPException(404, "exportação não encontrada")
     path = runtime.exports.file_path(job_id)
     if not path:
-        raise HTTPException(409, "exportaÃ§Ã£o ainda nÃ£o concluÃ­da")
+        raise HTTPException(409, "exportação ainda não concluída")
     return FileResponse(path, media_type="video/mp4", filename=path.name)
 
 
@@ -313,6 +313,6 @@ def delete_export(job_id: str, request: Request, p: Principal = Depends(current_
     runtime = rt(request)
     job = runtime.exports.get(job_id)
     if not job or (job["user_id"] != p.user_id and not p.is_admin):
-        raise HTTPException(404, "exportaÃ§Ã£o nÃ£o encontrada")
+        raise HTTPException(404, "exportação não encontrada")
     runtime.exports.delete(job_id)
     return {"ok": True}
