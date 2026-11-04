@@ -78,6 +78,7 @@ Execute com `.venv\Scripts\python.exe -m app.cli <comando>`. Com o serviço inst
 | `settings --set retention_days=15 max_storage_gb=200` | Altera as configurações |
 | `settings --set local_cache_gb=40` | Tamanho máximo da cópia local das gravações no disco do PC (0 desativa) |
 | `settings --set live_always_on=true` | Mantém cada câmera conectada para o ao vivo abrir na hora (padrão) |
+| `settings --set agentdvr_media_dir=C:/caminho/video` | Pasta `video` do Agent DVR, se ele grava fora do roteador (no disco do PC não é feita cópia local) |
 | `add-user NOME --role viewer`, `passwd NOME` | Usuários |
 
 ## Migração do Agent DVR, sem desligá-lo
