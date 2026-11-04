@@ -71,4 +71,16 @@ final class TimelineMathTests: XCTestCase {
         XCTAssertFalse(s.contains(20))
         XCTAssertEqual(s.duration, 10)
     }
+
+    func testUnionMergesOverlappingAndTouchingSpans() {
+        let other = [TimeSpan(start: 1500, end: 1800), TimeSpan(start: 2300, end: 2400), TimeSpan(start: 900, end: 950)]
+        XCTAssertEqual(TimelineMath.union([spans, other, []]), [
+            TimeSpan(start: 900, end: 950),
+            TimeSpan(start: 1000, end: 1800),
+            TimeSpan(start: 2000, end: 2400),
+            TimeSpan(start: 5000, end: 5060),
+        ])
+        XCTAssertEqual(TimelineMath.union([]), [])
+        XCTAssertEqual(TimelineMath.union([[TimeSpan(start: 0, end: 100)], [TimeSpan(start: 10, end: 20)]]), [TimeSpan(start: 0, end: 100)])
+    }
 }
