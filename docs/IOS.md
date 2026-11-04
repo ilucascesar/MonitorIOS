@@ -72,7 +72,11 @@ senhas em arquivos do repositório.
   - um toque salta ao ponto;
   - ±10 s e ±1 min, velocidade de 1× a 16×;
   - numa lacuna, o app mostra "Sem gravação às HH:MM" com o botão "Ir para" a próxima gravação;
-  - ao fim do dia, continua no dia seguinte.
+  - ao fim do dia, continua no dia seguinte;
+  - o botão de grade, no canto de cima, mostra até 4 câmeras juntas, no mesmo horário e com uma
+    linha do tempo comum (sem áudio). Câmeras sem gravação naquele horário ficam paradas e voltam
+    sozinhas quando a gravação delas começa. Um toque duplo numa câmera abre só ela. A escolha fica
+    salva no aparelho; o padrão é uma câmera por vez.
 - **Exportar**: escolha início e fim. O servidor monta o MP4 sem recodificar, o app baixa e abre a
   folha de compartilhamento (Salvar vídeo / Arquivos / AirDrop). "Marcar como importante" impede que
   a limpeza automática apague o trecho.
