@@ -52,4 +52,17 @@ enum TimelineMath {
     }
 
     static func recordedSeconds(_ spans: [TimeSpan]) -> Double { spans.reduce(0) { $0 + $1.duration } }
+
+    /// Junta as gravações de várias câmeras numa lista ordenada e sem sobreposição.
+    static func union(_ lists: [[TimeSpan]]) -> [TimeSpan] {
+        var out: [TimeSpan] = []
+        for s in lists.flatMap({ $0 }).sorted(by: { $0.start < $1.start }) {
+            if let last = out.last, s.start <= last.end {
+                out[out.count - 1] = TimeSpan(start: last.start, end: max(last.end, s.end))
+            } else {
+                out.append(s)
+            }
+        }
+        return out
+    }
 }
