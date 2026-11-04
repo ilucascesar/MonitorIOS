@@ -30,6 +30,8 @@ final class PlaybackModel: ObservableObject {
 
     let player = AVPlayer()
     let cameraId: Int
+    /// Na grade de várias câmeras quem troca de dia é o grupo, não cada câmera sozinha.
+    var followsNextDay = true
     private let api: APIClient
     private var output: AVPlayerItemVideoOutput?
     private var cancellables = Set<AnyCancellable>()
@@ -163,7 +165,7 @@ final class PlaybackModel: ObservableObject {
                 player.pause()
                 notice = Notice(text: "Fim das gravações disponíveis. Use AO VIVO para a imagem atual.", next: nil)
             }
-        } else if let next = Calendar.current.date(byAdding: .day, value: 1, to: day) {
+        } else if followsNextDay, let next = Calendar.current.date(byAdding: .day, value: 1, to: day) {
             await open(day: next, at: nil, autoplay: true)
         }
     }
@@ -246,6 +248,11 @@ final class PlaybackModel: ObservableObject {
                 player.playImmediately(atRate: rate)
             }
         }
+    }
+
+    func play(at t: Double) {
+        wantsPlay = true
+        seek(to: t)
     }
 
     func skip(_ seconds: Double) {
