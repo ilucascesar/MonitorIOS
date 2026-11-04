@@ -233,7 +233,7 @@ def test_local_copy_serves_playback_and_follows_retention(runtime):
     assert all(runtime.storage.source_path(s).exists() for s in segs[1:])
 
 
-def test_agent_dvr_files_copied_in_background_never_touched(runtime):
+def test_agent_dvr_files_copied_in_background_never_touched(runtime, monkeypatch):
     runtime.storage.check_health()
     cam = runtime.db.insert_camera({"name": "Garagem", "host": "10.0.0.8", "folder": "Garagem", "record_enabled": 0})
     src = runtime.cfg.agentdvr_root / "192.168.1.1" / "Garagem" / "7_01-01-2026_10-00-00_000.mkv"
@@ -247,6 +247,9 @@ def test_agent_dvr_files_copied_in_background_never_touched(runtime):
     })
     seg = runtime.db.get_segment(sid)
     mirror = runtime.storage.mirror
+    # Agent DVR gravando no disco do PC: lê direto, sem cópia duplicada.
+    assert mirror.path_for(seg) is None and runtime.storage.resolve(seg) == src
+    monkeypatch.setattr(mirror, "agentdvr_remote", lambda: True)  # pasta no roteador (\\192.168.1.1\...)
     assert mirror.ensure(seg) is None  # arquivo grande: não segura a requisição
     assert list(mirror._queue) == [sid]
     mirror._fetch(mirror._next())
