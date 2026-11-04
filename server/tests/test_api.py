@@ -143,7 +143,8 @@ def test_invalid_ranges_rejected(client, runtime):
     assert client.get(f"/api/v1/cameras/{cam_id}/timeline", params={"start": 10, "end": 5}, headers=h).status_code == 422
     assert client.get(f"/api/v1/cameras/{cam_id}/timeline", params={"start": 0, "end": 10 * 86400}, headers=h).status_code == 422
     assert client.get(f"/api/v1/cameras/{cam_id}/days", params={"month": "2026-11", "tz": "Mars/Base"}, headers=h).status_code == 422
-    assert client.get("/api/v1/cameras/999/timeline", params={"start": 0, "end": 10}, headers=h).status_code == 404
+    r = client.get("/api/v1/cameras/999/timeline", params={"start": 0, "end": 10}, headers=h)
+    assert r.status_code == 404 and r.json()["detail"] == "câmera não encontrada"  # acentos intactos
 
 
 def test_access_log_does_not_contain_tokens(client, runtime, caplog):
