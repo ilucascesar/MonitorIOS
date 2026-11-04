@@ -61,12 +61,17 @@ class LocalMirror:
 
     def path_for(self, seg: dict) -> Path | None:
         if seg["location"] == "remote":
+            if not self.storage_remote():
+                return None  # gravações já ficam no disco do PC: copiar só duplicaria
             return safe_join(self.root, seg["path"])
         if seg["location"] == "agentdvr":
             if not self.agentdvr_remote():
                 return None  # Agent DVR já grava no disco do PC: copiar só duplicaria
             return safe_join(self.root / AGENTDVR_DIR, seg["path"], foreign=True)
         return None
+
+    def storage_remote(self) -> bool:
+        return str(self.cfg.storage_root).startswith("\\\\")
 
     def agentdvr_remote(self) -> bool:
         return str(self.cfg.agentdvr_root).startswith("\\\\")
@@ -86,7 +91,7 @@ class LocalMirror:
     # --------------------------------------------------------- operações
     def adopt(self, src: Path, rel: str) -> bool:
         """Segmento recém-enviado ao pendrive: o arquivo do buffer passa a ser a cópia local."""
-        if not self.enabled:
+        if not self.enabled or not self.storage_remote():
             return False
         try:
             dest = safe_join(self.root, rel)
@@ -244,7 +249,8 @@ class LocalMirror:
 
     def trim(self) -> dict:
         """Mantém a cópia dentro de ``local_cache_gb`` e da retenção (apaga as mais antigas)."""
-        cap = self.cfg.settings.local_cache_gb * GB
+        # Nada no roteador: as cópias antigas não servem mais e saem todas.
+        cap = self.cfg.settings.local_cache_gb * GB if self.storage_remote() or self.agentdvr_remote() else 0
         cutoff = time.time() - (self.cfg.settings.retention_days + 1) * 86400
         files: list[tuple[float, int, str]] = []
         total = removed = 0
