@@ -28,6 +28,7 @@ class Runtime:
         self.events = EventBus(self.db)
         self.auth = AuthService(self.db, self.cfg.settings.session_ttl_hours)
         self.cameras = CameraService(self.cfg, self.db, self.events)
+        self.cameras.on_change = self.apply_camera_changes  # câmera achada em outro IP
         self.supervisor = RecordingSupervisor(self.cfg, self.db, self.events)
         self.storage = StorageManager(self.cfg, self.db, self.events, self.supervisor.active_files)
         self.live = LiveManager(self.cfg)
