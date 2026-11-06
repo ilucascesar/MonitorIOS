@@ -55,7 +55,10 @@ O painel local fica em `http://localhost:8765/admin`. Ele tem estas abas:
 
 - **Status**: câmeras, gravação, armazenamento, CPU e eventos, atualizados em tempo real.
 - **Câmeras**: cadastrar, editar, testar, descoberta ONVIF, importar do Agent DVR e ligar/desligar a
-  gravação. As alterações entram em vigor sem reiniciar o servidor.
+  gravação. As alterações entram em vigor sem reiniciar o servidor. O servidor guarda o MAC de cada
+  câmera. Se o roteador der outro IP para ela, ou der o IP dela para outro aparelho, o servidor a
+  procura na rede local em até 5 minutos e corrige o endereço sozinho. A troca aparece em **Eventos**.
+  Reservar o IP de cada câmera no roteador continua sendo o mais seguro.
 - **Armazenamento**: credenciais SMB, teste de escrita, retenção em dias, limite global em GB,
   espaço livre mínimo, limpeza e reconciliação manuais.
 - **Usuários**: contas do app. O perfil *viewer* só assiste; *admin* também altera configurações.
