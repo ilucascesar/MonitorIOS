@@ -12,6 +12,7 @@ from ..database import Database
 from ..recordings.indexer import probe_stream
 from ..security import secrets as vault
 from ..security.paths import sanitize_folder
+from . import netfind
 from .onvif import OnvifClient, OnvifError
 from .urls import build_stream_url, strip_credentials, with_credentials
 
@@ -38,6 +39,11 @@ class CameraService:
         self.db = db
         self.events = events
         self.reachable: dict[int, dict] = {}
+        # Seguir troca de IP pelo MAC (substituíveis nos testes).
+        self.mac_of = netfind.mac_of
+        self.find_host = netfind.find_host
+        self.on_change = None  # runtime.apply_camera_changes
+        self._relocated_at: dict[int, float] = {}
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -112,6 +118,8 @@ class CameraService:
         if not self.db.get_camera(cam_id):
             raise KeyError(cam_id)
         clean = self._validate(data)
+        if "host" in clean and clean["host"] != self.db.get_camera(cam_id)["host"]:
+            clean["mac"] = ""  # outro aparelho: o MAC é reaprendido
         if any(k in clean for k in ("main_url", "sub_url")):
             # Nova URL: codec será redetectado no primeiro segmento.
             if "main_url" in clean and "codec" not in clean:
@@ -193,4 +201,36 @@ class CameraService:
         if prev is not None and prev != reachable:
             self.events.emit("warning" if not reachable else "info", "camera",
                              f"{cam['name']}: {'voltou a responder' if reachable else 'não responde na rede'}", cam["id"])
+        if "mac" in cam:
+            self._follow_mac(cam, ok, port)
         return reachable
+
+    # Intervalo mínimo entre varreduras da rede por câmera.
+    RELOCATE_EVERY = 300
+
+    def _follow_mac(self, cam: dict, ok: bool, port: int) -> None:
+        """O roteador pode dar o IP de uma câmera para outra: o MAC diz qual aparelho responde."""
+        current = self.mac_of(cam["host"]) if ok else ""
+        if not cam["mac"]:
+            if current:
+                self.db.update_camera(cam["id"], {"mac": current})
+            return
+        if current == cam["mac"]:
+            return
+        now = time.time()
+        if now - self._relocated_at.get(cam["id"], 0) < self.RELOCATE_EVERY:
+            return
+        self._relocated_at[cam["id"]] = now
+        new = self.find_host(cam["mac"], cam["host"], port, tcp_check, self.mac_of)
+        if not new or new == cam["host"]:
+            return
+        old = cam["host"]
+        self.db.update_camera(cam["id"], {
+            "host": new,
+            "main_url": netfind.with_host(cam["main_url"], old, new),
+            "sub_url": netfind.with_host(cam["sub_url"], old, new),
+        })
+        log.info("câmera mudou de IP", extra={"ctx": {"camera": cam["id"], "from": old, "to": new}})
+        self.events.emit("warning", "camera", f"{cam['name']} mudou de IP ({old} → {new}); configuração atualizada", cam["id"])
+        if self.on_change:
+            self.on_change(cam["id"])
