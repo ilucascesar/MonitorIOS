@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS cameras (
     sub_width INTEGER NOT NULL DEFAULT 0,
     sub_height INTEGER NOT NULL DEFAULT 0,
     sort_order INTEGER NOT NULL DEFAULT 0,
+    mac TEXT NOT NULL DEFAULT '',
     deleted INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
@@ -119,7 +120,7 @@ CREATE TABLE IF NOT EXISTS secrets (name TEXT PRIMARY KEY, value TEXT NOT NULL);
 CAMERA_FIELDS = (
     "name", "host", "onvif_port", "rtsp_port", "username", "password_enc", "main_url", "sub_url",
     "record_stream", "audio_mode", "record_enabled", "live_enabled", "folder", "codec", "width",
-    "height", "fps", "sub_codec", "sub_width", "sub_height", "sort_order",
+    "height", "fps", "sub_codec", "sub_width", "sub_height", "sort_order", "mac",
 )
 
 
@@ -135,6 +136,9 @@ class Database:
             c.execute("PRAGMA synchronous=NORMAL")
             c.execute("PRAGMA foreign_keys=ON")
             c.executescript(SCHEMA)
+            # Bancos criados antes da coluna mac (endereço da câmera para seguir trocas de IP).
+            if "mac" not in {r["name"] for r in c.execute("PRAGMA table_info(cameras)")}:
+                c.execute("ALTER TABLE cameras ADD COLUMN mac TEXT NOT NULL DEFAULT ''")
             c.execute("INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', ?)", (str(SCHEMA_VERSION),))
 
     def close(self) -> None:
